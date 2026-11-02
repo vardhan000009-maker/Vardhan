@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>XENØ — THE UNKNOWN IS ALIVE</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            xeno: {
+              bg: '#05060A',
+              space: '#080D16',
+              cyan: '#00F0FF',
+              green: '#A6FF00',
+              red: '#FF315B',
+              white: '#EAF4FF',
+              grey: '#8196A9',
+              darkcard: '#0A101D',
+            }
+          },
+          fontFamily: {
+            mono: ['Space Mono', 'Courier New', 'monospace'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+          animation: {
+            'pulse-glow': 'pulseGlow 3s infinite ease-in-out',
+            'float': 'float 6s infinite ease-in-out',
+            'glitch': 'glitch 1s infinite linear alternate-reverse',
+            'scanline': 'scanline 8s linear infinite',
+          },
+          keyframes: {
+            pulseGlow: {
+              '0%, 100%': { opacity: '0.4', filter: 'drop-shadow(0 0 15px rgba(0,240,255,0.4))' },
+              '50%': { opacity: '0.9', filter: 'drop-shadow(0 0 35px rgba(0,240,255,0.8))' },
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0px) rotate(0deg)' },
+              '50%': { transform: 'translateY(-12px) rotate(2deg)' },
+            },
+            scanline: {
+              '0%': { transform: 'translateY(-100%)' },
+              '100%': { transform: 'translateY(1000%)' }
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Google Fonts & Lucide Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- React & Babel CDNs -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Lucide Icons script -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #05060A;
+      color: #EAF4FF;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Custom Scrollbar for inner modals */
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(8, 13, 22, 0.8);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #00F0FF;
+      border-radius: 2px;
+    }
+
+    /* Film Grain & Scanline overlays */
+    .scanlines {
+      background: linear-gradient(
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.25) 50%
+      );
+      background-size: 100% 4px;
+    }
+    
+    .vignette {
+      background: radial-gradient(circle, rgba(5,6,10,0) 50%, rgba(5,6,10,0.85) 90%, rgba(5,6,10,0.98) 100%);
+    }
+
+    .glow-cyan {
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.35);
+    }
+    .text-glow-cyan {
+      text-shadow: 0 0 12px rgba(0, 240, 255, 0.7);
+    }
+    .text-glow-red {
+      text-shadow: 0 0 12px rgba(255, 49, 91, 0.8);
+    }
+    .text-glow-green {
+      text-shadow: 0 0 12px rgba(166, 255, 0, 0.7);
+    }
+
+    /* Clip Path UI accents */
+    .sci-fi-cut {
+      clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
+    }
+    .sci-fi-cut-sm {
+      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+    }
+    .sci-fi-border {
+      border: 1px solid rgba(0, 240, 255, 0.25);
+    }
+    .sci-fi-border-red {
+      border: 1px solid rgba(255, 49, 91, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    // ==========================================
+    // 1. WEB AUDIO API SYNTHESIZER SOUND ENGINE
+    // ==========================================
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.droneOsc1 = null;
+        this.droneOsc2 = null;
+        this.droneGain = null;
+        this.isMuted = true;
+        this.initialized = false;
+        this.analyser = null;
+      }
+
+      init() {
+        if (this.initialized) return;
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+          
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+          
+          this.analyser = this.ctx.createAnalyser();
+          this.analyser.fftSize = 64;
+          
+          this.masterGain.connect(this.analyser);
+          this.analyser.connect(this.ctx.destination);
+          
+          this.initialized = true;
+          this.isMuted = false;
+          this.startAmbientDrone();
+        } catch (e) {
+          console.warn("Audio Context setup failed", e);
+        }
+      }
+
+      toggleMute() {
+        if (!this.initialized) {
+          this.init();
+          return false;
+        }
+        this.isMuted = !this.isMuted;
+        if (this.masterGain) {
+          this.masterGain.gain.linearRampToValueAtTime(
+            this.isMuted ? 0 : 0.3, 
+            this.ctx.currentTime + 0.2
+          );
+        }
+        return this.isMuted;
+      }
+
+      startAmbientDrone() {
+        if (!this.ctx) return;
+        
+        // Deep sub-bass drone oscillator
+        this.droneOsc1 = this.ctx.createOscillator();
+        this.droneOsc2 = this.ctx.createOscillator();
+        const filter = this.ctx.createBiquadFilter();
+        this.droneGain = this.ctx.createGain();
+
+        this.droneOsc1.type = 'sawtooth';
+        this.droneOsc1.frequency.setValueAtTime(43.2, this.ctx.currentTime); // 43.2 Hz sub drone
+
+        this.droneOsc2.type = 'sine';
+        this.droneOsc2.frequency.setValueAtTime(86.4, this.ctx.currentTime);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(180, this.ctx.currentTime);
+
+        this.droneGain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+
+        this.droneOsc1.connect(filter);
+        this.droneOsc2.connect(filter);
+        filter.connect(this.droneGain);
+        this.droneGain.connect(this.masterGain);
+
+        this.droneOsc1.start();
+        this.droneOsc2.start();
+      }
+
+      playHoverSound() {
+        if (this.isMuted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.05);
+
+        gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+      }
+
+      playClickSound() {
+        if (this.isMuted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1400, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.12);
+
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.12);
+      }
+
+      playWarpSound() {
+        if (this.isMuted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const filter = this.ctx.createBiquadFilter();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(2400, this.ctx.currentTime + 0.8);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(300, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(3500, this.ctx.currentTime + 0.8);
+
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.85);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.85);
+      }
+
+      playVoidAlarm() {
+        if (this.isMuted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+        osc.frequency.setValueAtTime(180, this.ctx.currentTime + 0.15);
+
+        gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
+      }
+    }
+
+    const soundSystem = new SoundEngine();
+
+    // ==========================================
+    // 2. BIOLUMINESCENT CURSOR COMPONENT
+    // ==========================================
+    const BioluminescentCursor = ({ isVoid }) => {
+      const canvasRef = useRef(null);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let animationFrameId;
+        
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        const handleResize = () => {
+          width = canvas.width = window.innerWidth;
+          height = canvas.height = window.innerHeight;
+        };
+        window.addEventListener('resize', handleResize);
+
+        const particles = [];
+        const maxParticles = 24;
+
+        let mouseX = width / 2;
+        let mouseY = height / 2;
+
+        const handleMouseMove = (e) => {
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+
+          particles.push({
+            x: mouseX,
+            y: mouseY,
+            size: Math.random() * 4 + 2,
+            alpha: 1,
+            vx: (Math.random() - 0.5) * 1.5,
+            vy: (Math.random() - 0.5) * 1.5,
+          });
+
+          if (particles.length > maxParticles) {
+            particles.shift();
+          }
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+
+        const render = () => {
+          ctx.clearRect(0, 0, width, height);
+
+          // Render glowing particle trail
+          for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.alpha -= 0.035;
+
+            if (p.alpha <= 0) continue;
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fillStyle = isVoid 
+              ? `rgba(255, 49, 91, ${p.alpha * 0.7})` 
+              : `rgba(0, 240, 255, ${p.alpha * 0.7})`;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = isVoid ? '#FF315B' : '#00F0FF';
+            ctx.fill();
+          }
+
+          // Render central cursor core
+          ctx.beginPath();
+          ctx.arc(mouseX, mouseY, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = isVoid ? '#FF315B' : '#00F0FF';
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = isVoid ? '#FF315B' : '#A6FF00';
+          ctx.fill();
+
+          animationFrameId = requestAnimationFrame(render);
+        };
+
+        render();
+
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          window.removeEventListener('mousemove', handleMouseMove);
+          cancelAnimationFrame(animationFrameId);
+        };
+      }, [isVoid]);
+
+      return (
+        <canvas 
+          ref={canvasRef} 
+          className="fixed inset-0 pointer-events-none z-50 transition-colors duration-500" 
+        />
+      );
+    };
+
+    // ==========================================
+    // 3. THREE.JS 3D CANVAS WORLD SYSTEM
+    // ==========================================
+    const ThreeScene = ({ stage, activeSection, isVoid, cameraTarget }) => {
+      const mountRef = useRef(null);
+
+      useEffect(() => {
+        const mount = mountRef.current;
+        if (!mount) return;
+
+        // Scene Setup
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(isVoid ? 0x120307 : 0x05060A, 0.035);
+
+        // Camera Setup
+        const camera = new THREE.PerspectiveCamera(
+          60, 
+          mount.clientWidth / mount.clientHeight, 
+          0.1, 
+          1000
+        );
+        camera.position.set(0, 0, 15);
+
+        // Renderer Setup
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(mount.clientWidth, mount.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        mount.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(isVoid ? 0xff315b : 0x00f0ff, 0.4);
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(isVoid ? 0xff315b : 0xa6ff00, 2, 40);
+        pointLight.position.set(5, 5, 5);
+        scene.add(pointLight);
+
+        const coreLight = new THREE.PointLight(0x00f0ff, 3, 20);
+        coreLight.position.set(0, 0, 0);
+        scene.add(coreLight);
+
+        // ----------------------------------------
+        // INTRO EYE MESH (Stage === 'intro')
+        // ----------------------------------------
+        const eyeGroup = new THREE.Group();
+
+        // Biomechanical Eyeball base
+        const eyeGeo = new THREE.SphereGeometry(3.2, 64, 64);
+        const eyeMat = new THREE.MeshStandardMaterial({
+          color: 0x080d16,
+          roughness: 0.15,
+          metalness: 0.85,
+          wireframe: false,
+        });
+        const eyeball = new THREE.Mesh(eyeGeo, eyeMat);
+        eyeGroup.add(eyeball);
+
+        // Glowing Iris ring
+        const irisGeo = new THREE.RingGeometry(0.8, 1.8, 32);
+        const irisMat = new THREE.MeshBasicMaterial({
+          color: isVoid ? 0xff315b : 0x00f0ff,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.9,
+        });
+        const iris = new THREE.Mesh(irisGeo, irisMat);
+        iris.position.z = 3.15;
+        eyeGroup.add(iris);
+
+        // Metallic Pupil center
+        const pupilGeo = new THREE.SphereGeometry(0.7, 32, 32);
+        const pupilMat = new THREE.MeshBasicMaterial({
+          color: 0x05060a,
+        });
+        const pupil = new THREE.Mesh(pupilGeo, pupilMat);
+        pupil.position.z = 2.8;
+        eyeGroup.add(pupil);
+
+        // Biomechanical Orbital rings around Eye
+        const ring1Geo = new THREE.TorusGeometry(4.5, 0.04, 16, 100);
+        const ring1Mat = new THREE.MeshBasicMaterial({ color: 0x8196a9, wireframe: true });
+        const orbitalRing1 = new THREE.Mesh(ring1Geo, ring1Mat);
+        eyeGroup.add(orbitalRing1);
+
+        const ring2Geo = new THREE.TorusGeometry(5.2, 0.03, 16, 100);
+        const ring2Mat = new THREE.MeshBasicMaterial({ color: 0xa6ff00, transparent: true, opacity: 0.6 });
+        const orbitalRing2 = new THREE.Mesh(ring2Geo, ring2Mat);
+        orbitalRing2.rotation.x = Math.PI / 3;
+        eyeGroup.add(orbitalRing2);
+
+        scene.add(eyeGroup);
+
+        // ----------------------------------------
+        // MAIN UNIVERSE ARTIFACTS & STARS (Stage === 'main')
+        // ----------------------------------------
+        const universeGroup = new THREE.Group();
+
+        // Central Extraterrestrial Crystal Core
+        const crystalGeo = new THREE.IcosahedronGeometry(2.5, 0);
+        const crystalMat = new THREE.MeshStandardMaterial({
+          color: isVoid ? 0xff315b : 0x00f0ff,
+          wireframe: true,
+          roughness: 0.2,
+          metalness: 0.9,
+        });
+        const crystalCore = new THREE.Mesh(crystalGeo, crystalMat);
+        universeGroup.add(crystalCore);
+
+        // Floating Bioluminescent Particle Starfield
+        const starCount = 600;
+        const starGeo = new THREE.BufferGeometry();
+        const starPos = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount * 3; i += 3) {
+          starPos[i] = (Math.random() - 0.5) * 80;
+          starPos[i + 1] = (Math.random() - 0.5) * 80;
+          starPos[i + 2] = (Math.random() - 0.5) * 80;
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const starMat = new THREE.PointsMaterial({
+          size: 0.25,
+          color: isVoid ? 0xff315b : 0x00f0ff,
+          transparent: true,
+          opacity: 0.8,
+        });
+        const starField = new THREE.Points(starGeo, starMat);
+        universeGroup.add(starField);
+
+        // Section Floating Orbital Structures (Pillars)
+        const sectionNodes = [];
+        const sectionCoords = [
+          { name: 'CORE', pos: [0, 0, 0], color: 0x00f0ff },
+          { name: 'ARCHIVES', pos: [-12, 5, -8], color: 0xa6ff00 },
+          { name: 'SPECIES', pos: [12, -4, -6], color: 0x00f0ff },
+          { name: 'SIGNAL', pos: [-8, -8, -10], color: 0x8196a9 },
+          { name: 'VOID', pos: [0, 12, -15], color: 0xff315b }
+        ];
+
+        sectionCoords.forEach((nodeData) => {
+          const nodeGeo = new THREE.OctahedronGeometry(1.2, 0);
+          const nodeMat = new THREE.MeshStandardMaterial({
+            color: nodeData.color,
+            wireframe: true,
+            emissive: nodeData.color,
+            emissiveIntensity: 0.5
+          });
+          const mesh = new THREE.Mesh(nodeGeo, nodeMat);
+          mesh.position.set(...nodeData.pos);
+          universeGroup.add(mesh);
+          sectionNodes.push({ mesh, data: nodeData });
+        });
+
+        scene.add(universeGroup);
+
+        // Mouse tracking setup
+        let mouseX = 0;
+        let mouseY = 0;
+        let targetCamX = 0;
+        let targetCamY = 0;
+
+        const handleMouseMove = (e) => {
+          mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+          mouseY = -(e.clientY / window.innerHeight - 0.5) * 2;
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+
+        // Window resize
+        const handleResize = () => {
+          camera.aspect = mount.clientWidth / mount.clientHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(mount.clientWidth, mount.clientHeight);
+        };
+        window.addEventListener('resize', handleResize);
+
+        // Animation Loop
+        let animationFrameId;
+        const clock = new THREE.Clock();
+
+        const animate = () => {
+          const elapsedTime = clock.getElapsedTime();
+
+          // Stage visibility toggle
+          if (stage === 'intro') {
+            eyeGroup.visible = true;
+            universeGroup.visible = false;
+
+            // Eye tracks cursor smoothly
+            eyeGroup.rotation.y = THREE.MathUtils.lerp(eyeGroup.rotation.y, mouseX * 0.4, 0.05);
+            eyeGroup.rotation.x = THREE.MathUtils.lerp(eyeGroup.rotation.x, -mouseY * 0.4, 0.05);
+
+            orbitalRing1.rotation.z += 0.005;
+            orbitalRing2.rotation.y += 0.008;
+            eyeball.rotation.y += 0.002;
+          } else {
+            eyeGroup.visible = false;
+            universeGroup.visible = true;
+
+            // Rotate main crystal core
+            crystalCore.rotation.x = elapsedTime * 0.2;
+            crystalCore.rotation.y = elapsedTime * 0.3;
+
+            // Float section nodes
+            sectionNodes.forEach((item, index) => {
+              item.mesh.rotation.y += 0.01;
+              item.mesh.position.y = item.data.pos[1] + Math.sin(elapsedTime * 1.5 + index) * 0.4;
+            });
+
+            // Camera target interpolation based on active section
+            let targetZ = 15;
+            if (activeSection === 'ARCHIVES') { targetCamX = -6; targetCamY = 2; targetZ = 10; }
+            else if (activeSection === 'SPECIES') { targetCamX = 6; targetCamY = -2; targetZ = 10; }
+            else if (activeSection === 'SIGNAL') { targetCamX = -4; targetCamY = -4; targetZ = 10; }
+            else if (activeSection === 'VOID') { targetCamX = 0; targetCamY = 6; targetZ = 8; }
+            else { targetCamX = 0; targetCamY = 0; targetZ = 15; }
+
+            // Smooth camera lerp
+            camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCamX + mouseX * 1.5, 0.04);
+            camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetCamY + mouseY * 1.5, 0.04);
+            camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZ, 0.04);
+            camera.lookAt(targetCamX * 0.5, targetCamY * 0.5, 0);
+          }
+
+          renderer.render(scene, camera);
+          animationFrameId = requestAnimationFrame(animate);
+        };
+
+        animate();
+
+        return () => {
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('resize', handleResize);
+          cancelAnimationFrame(animationFrameId);
+          if (mount.contains(renderer.domElement)) {
+            mount.removeChild(renderer.domElement);
+          }
+          renderer.dispose();
+        };
+      }, [stage, activeSection, isVoid]);
+
+      return <div ref={mountRef} className="absolute inset-0 w-full h-full pointer-events-none" />;
+    };
+
+    // ==========================================
+    // 4. MAIN INTERACTIVE APPLICATION
+    // ==========================================
+    const App = () => {
+      const [stage, setStage] = useState('intro'); // 'intro' | 'main'
+      const [activeSection, setActiveSection] = useState('CORE'); // 'CORE'|'ARCHIVES'|'SPECIES'|'SIGNAL'|'VOID'
+      const [isAudioMuted, setIsAudioMuted] = useState(true);
+      const [isVoid, setIsVoid] = useState(false);
+      const [selectedArtifact, setSelectedArtifact] = useState(null);
+      const [speciesScanMode, setSpeciesScanMode] = useState('NORMAL'); // 'NORMAL' | 'THERMAL' | 'QUANTUM'
+      
+      // Transmission Form State
+      const [formData, setFormData] = useState({ name: '', email: '', message: '' });
+      const [formStatus, setFormStatus] = useState('IDLE'); // 'IDLE' | 'ENCRYPTING' | 'SENT' | 'ERROR'
+      const [encryptProgress, setEncryptProgress] = useState(0);
+
+      // Void Section Easter Egg State
+      const [terminalInput, setTerminalInput] = useState('');
+      const [terminalLogs, setTerminalLogs] = useState([
+        'CLASSIFIED TRANSMISSION ARCHIVE v9.4',
+        'SYSTEM ALERT: UNAUTHORIZED SPECIES ACCESS DETECTED.',
+        'TYPE "purge" OR "exit" TO RESTORE NEURAL REALITY.'
+      ]);
+      const [voidTimer, setVoidTimer] = useState(222);
+
+      // Audio visualizer state
+      const [audioFreq, setAudioFreq] = useState([12, 28, 45, 20, 35]);
+
+      useEffect(() => {
+        // Initialize Lucide icons
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      });
+
+      // Void timer tick
+      useEffect(() => {
+        if (!isVoid) return;
+        const interval = setInterval(() => {
+          setVoidTimer((prev) => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+        return () => clearInterval(interval);
+      }, [isVoid]);
+
+      // Audio Frequency visualizer animation simulation
+      useEffect(() => {
+        const interval = setInterval(() => {
+          if (!isAudioMuted) {
+            setAudioFreq([
+              Math.floor(Math.random() * 40 + 10),
+              Math.floor(Math.random() * 50 + 20),
+              Math.floor(Math.random() * 60 + 15),
+              Math.floor(Math.random() * 45 + 10),
+              Math.floor(Math.random() * 30 + 10)
+            ]);
+          }
+        }, 150);
+        return () => clearInterval(interval);
+      }, [isAudioMuted]);
+
+      const handleAudioToggle = () => {
+        const muted = soundSystem.toggleMute();
+        setIsAudioMuted(muted);
+      };
+
+      const handleEnterTransmission = () => {
+        soundSystem.init();
+        soundSystem.playWarpSound();
+        setStage('main');
+        setActiveSection('CORE');
+      };
+
+      const handleNavClick = (sectionName) => {
+        soundSystem.playClickSound();
+        setActiveSection(sectionName);
+        if (sectionName === 'VOID') {
+          setIsVoid(true);
+          soundSystem.playVoidAlarm();
+        } else {
+          setIsVoid(false);
+        }
+      };
+
+      const handleFormSubmit = (e) => {
+        e.preventDefault();
+        if (!formData.name || !formData.email || !formData.message) {
+          setFormStatus('ERROR');
+          return;
+        }
+
+        soundSystem.playClickSound();
+        setFormStatus('ENCRYPTING');
+        setEncryptProgress(0);
+
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 20;
+          setEncryptProgress(progress);
+          if (progress >= 100) {
+            clearInterval(interval);
+            setFormStatus('SENT');
+            soundSystem.playWarpSound();
+          }
+        }, 250);
+      };
+
+      const handleTerminalSubmit = (e) => {
+        e.preventDefault();
+        const cmd = terminalInput.trim().toLowerCase();
+        soundSystem.playClickSound();
+
+        let newLogs = [...terminalLogs, `> ${terminalInput}`];
+
+        if (cmd === 'exit' || cmd === 'purge' || cmd === 'restore') {
+          newLogs.push('RESTORING PRIMAL SIMULATION...');
+          setTerminalLogs(newLogs);
+          setTimeout(() => {
+            setIsVoid(false);
+            setActiveSection('CORE');
+          }, 800);
+        } else if (cmd === 'help') {
+          newLogs.push('AVAILABLE COMMANDS: purge, exit, status, entity');
+          setTerminalLogs(newLogs);
+        } else if (cmd === 'status') {
+          newLogs.push('STATUS: CRITICAL VOID LEAK AT SECTOR 0x899');
+          setTerminalLogs(newLogs);
+        } else {
+          newLogs.push(`UNKNOWN COMMAND: "${cmd}". TYPE "purge" TO EXIT.`);
+          setTerminalLogs(newLogs);
+        }
+
+        setTerminalInput('');
+      };
+
+      // Project showcase artifacts
+      const artifacts = [
+        {
+          id: '01',
+          name: 'NEBULA-X INTERFACE',
+          category: 'Sub-Dimensional Neural AI',
+          tech: ['WebGL', 'GLSL Shaders', 'Three.js', 'React'],
+          desc: 'An autonomous neural web interface engineered to synthesize sub-dimensional deep space communications into real-time visual telemetries.',
+          status: 'ACTIVE MATRIX'
+        },
+        {
+          id: '02',
+          name: 'KINETIC BIOME',
+          category: 'Procedural Alien Ecosystem',
+          tech: ['Web Audio API', 'Compute Shaders', 'GSAP', 'Tailwind'],
+          desc: 'Real-time procedural simulation of extraterrestrial bioluminescent flora reacting to user sound frequencies and gravitational cursor waves.',
+          status: 'STABLE ECO'
+        },
+        {
+          id: '03',
+          name: 'QUANTUM MATRIX',
+          category: 'High-Frequency Signal Engine',
+          tech: ['TypeScript', 'Three.js', 'Canvas 2D', 'WebSockets'],
+          desc: 'High-throughput quantum signal renderer rendering 100,000+ data nodes simultaneously with near-zero latency telemetry.',
+          status: 'ENCRYPTED'
+        },
+        {
+          id: '04',
+          name: 'HYPERGRID 2099',
+          category: 'Spatial Data Vault',
+          tech: ['React Three Fiber', 'GLTF', 'Tailwind CSS', 'Node.js'],
+          desc: 'Decentralized spatial memory archive engineered to store encrypted civilization transmissions across planetary nodes.',
+          status: 'RESERVED ARCHIVE'
+        }
+      ];
+
+      return (
+        <div className={`relative w-full h-screen overflow-hidden ${isVoid ? 'bg-[#0F0206]' : 'bg-[#05060A]'} transition-colors duration-700`}>
+          
+          {/* Background FX Layers */}
+          <div className="absolute inset-0 scanlines opacity-30 pointer-events-none z-10"></div>
+          <div className="absolute inset-0 vignette pointer-events-none z-10"></div>
+
+          {/* 3D Three.js WebGL Canvas */}
+          <ThreeScene 
+            stage={stage} 
+            activeSection={activeSection} 
+            isVoid={isVoid} 
+          />
+
+          {/* Bioluminescent Particle Cursor */}
+          <BioluminescentCursor isVoid={isVoid} />
+
+          {/* Top HUD Header & Audio Controls */}
+          <header className="absolute top-0 left-0 w-full p-4 md:p-6 flex justify-between items-center z-30 font-mono text-xs tracking-widest pointer-events-auto">
+            <div className="flex items-center space-x-3">
+              <div className={`w-3 h-3 ${isVoid ? 'bg-xeno-red shadow-[0_0_10px_#FF315B]' : 'bg-xeno-cyan shadow-[0_0_10px_#00F0FF]'} rounded-full animate-pulse`} />
+              <span className="font-bold text-sm tracking-wider">XENØ // TRANSMISSION_NET</span>
+              <span className="hidden sm:inline-block text-xeno-grey text-[10px]">FREQ: 432.89 MHz</span>
+            </div>
+
+            <div className="flex items-center space-x-4">
+              {/* Audio Toggle & Equalizer */}
+              <button 
+                onClick={handleAudioToggle}
+                onMouseEnter={() => soundSystem.playHoverSound()}
+                className={`flex items-center space-x-2 px-3 py-1.5 sci-fi-cut-sm border transition-all duration-300 ${
+                  !isAudioMuted 
+                    ? (isVoid ? 'border-xeno-red text-xeno-red bg-xeno-red/10' : 'border-xeno-cyan text-xeno-cyan bg-xeno-cyan/10')
+                    : 'border-xeno-grey/40 text-xeno-grey hover:border-xeno-white'
+                }`}
+              >
+                {/* Equalizer visualizer bars */}
+                <div className="flex items-end space-x-0.5 h-3">
+                  {audioFreq.map((val, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`w-0.5 transition-all duration-150 ${!isAudioMuted ? (isVoid ? 'bg-xeno-red' : 'bg-xeno-cyan') : 'bg-xeno-grey'}`} 
+                      style={{ height: !isAudioMuted ? `${Math.max(3, val * 0.25)}px` : '3px' }}
+                    />
+                  ))}
+                </div>
+                <span className="text-[11px] font-mono">{isAudioMuted ? 'AUDIO: OFF' : 'AUDIO: LIVE'}</span>
+              </button>
+
+              {stage === 'main' && (
+                <button 
+                  onClick={() => handleNavClick('VOID')}
+                  onMouseEnter={() => soundSystem.playHoverSound()}
+                  className="px-2.5 py-1 text-[10px] border border-xeno-red/60 text-xeno-red hover:bg-xeno-red/20 transition-colors sci-fi-cut-sm hidden sm:block"
+                >
+                  [ CLASSIFIED VOID ]
+                </button>
+              )}
+            </div>
+          </header>
+
+          {/* ========================================================= */}
+          {/* 1. INTRO STAGE (FIRST CONTACT TRANSMISSION) */}
+          {/* ========================================================= */}
+          {stage === 'intro' && (
+            <div className="relative w-full h-full flex flex-col justify-between items-center p-6 z-20 pointer-events-auto">
+              
+              {/* Top Intro Status */}
+              <div className="mt-16 text-center font-mono text-xs text-xeno-cyan/70 tracking-widest uppercase">
+                [ UNKNOWN SIGNAL DETECTED — ORIGIN: SECTOR X-89 ]
+              </div>
+
+              {/* Center Interactive Text Card */}
+              <div className="max-w-xl text-center space-y-6 bg-xeno-space/40 backdrop-blur-md p-8 rounded-xl border border-xeno-cyan/20 sci-fi-cut">
+                <h1 className="text-3xl md:text-5xl font-extrabold tracking-widest text-glow-cyan text-xeno-white uppercase">
+                  WE HAVE BEEN WAITING.
+                </h1>
+                
+                <p className="text-xeno-cyan font-mono text-sm tracking-wide">
+                  "DO YOU RECOGNIZE THIS PLACE?"
+                </p>
+
+                <p className="text-xeno-grey text-xs md:text-sm font-sans leading-relaxed">
+                  Your civilization was not the first to discover the internet. We established this sub-dimensional transmission link long before your digital realm emerged.
+                </p>
+
+                <div className="pt-4 flex flex-col sm:flex-row justify-center items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                  <button
+                    onClick={handleEnterTransmission}
+                    onMouseEnter={() => soundSystem.playHoverSound()}
+                    className="w-full sm:w-auto px-8 py-3 bg-xeno-cyan text-xeno-bg font-mono font-bold text-xs tracking-widest uppercase sci-fi-cut hover:bg-xeno-green transition-all duration-300 shadow-[0_0_20px_rgba(0,240,255,0.6)]"
+                  >
+                    ENTER TRANSMISSION
+                  </button>
+                  <button
+                    onClick={handleEnterTransmission}
+                    onMouseEnter={() => soundSystem.playHoverSound()}
+                    className="w-full sm:w-auto px-6 py-3 border border-xeno-grey/40 text-xeno-grey font-mono text-xs tracking-widest uppercase sci-fi-cut hover:border-xeno-white hover:text-xeno-white transition-all"
+                  >
+                    SKIP TRANSMISSION
+                  </button>
+                </div>
+              </div>
+
+              {/* Bottom Footer Info */}
+              <div className="mb-6 font-mono text-[10px] text-xeno-grey/60 text-center">
+                MOUSE TRACKING ACTIVE // WebGL SHADER SYSTEM ONLINE
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 2. MAIN ALIEN UNIVERSE EXPERIENCE */}
+          {/* ========================================================= */}
+          {stage === 'main' && (
+            <div className="relative w-full h-full z-20 flex flex-col justify-between p-4 md:p-8 pointer-events-none">
+              
+              {/* Floating Orbital Navigation Controls (Navbar) */}
+              <nav className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center space-x-1 md:space-x-2 bg-xeno-darkcard/80 backdrop-blur-md p-2 rounded-full border border-xeno-cyan/30 sci-fi-border">
+                {['CORE', 'ARCHIVES', 'SPECIES', 'SIGNAL', 'VOID'].map((sec) => {
+                  const isActive = activeSection === sec;
+                  const isSecVoid = sec === 'VOID';
+                  return (
+                    <button
+                      key={sec}
+                      onClick={() => handleNavClick(sec)}
+                      onMouseEnter={() => soundSystem.playHoverSound()}
+                      className={`px-3 md:px-5 py-2 rounded-full font-mono text-[11px] font-bold tracking-widest transition-all duration-300 ${
+                        isActive
+                          ? (isSecVoid ? 'bg-xeno-red text-xeno-bg shadow-[0_0_15px_#FF315B]' : 'bg-xeno-cyan text-xeno-bg shadow-[0_0_15px_#00F0FF]')
+                          : (isSecVoid ? 'text-xeno-red hover:bg-xeno-red/10' : 'text-xeno-grey hover:text-xeno-white hover:bg-xeno-cyan/10')
+                      }`}
+                    >
+                      {sec}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {/* Main Content View Container */}
+              <main className="w-full h-full pt-16 pb-20 flex items-center justify-center pointer-events-none">
+                
+                {/* -------------------------------------------------- */}
+                {/* SECTION 1: THE CORE */}
+                {/* -------------------------------------------------- */}
+                {activeSection === 'CORE' && (
+                  <div className="max-w-3xl text-center space-y-6 pointer-events-auto animate-fadeIn">
+                    <div className="inline-block px-3 py-1 bg-xeno-cyan/10 border border-xeno-cyan/30 font-mono text-xs text-xeno-cyan tracking-widest sci-fi-cut-sm">
+                      SYS_ID // TRANSMISSION CORE 01
+                    </div>
+                    
+                    <h1 className="text-4xl md:text-7xl font-extrabold tracking-tight text-xeno-white font-mono text-glow-cyan">
+                      THE UNKNOWN IS ALIVE.
+                    </h1>
+
+                    <p className="text-base md:text-xl text-xeno-grey font-sans leading-relaxed max-w-2xl mx-auto">
+                      Somewhere beyond the boundaries of known existence, something is waiting to be discovered. Welcome to the biomechanical digital archives of XENØ.
+                    </p>
+
+                    {/* Dynamic Telemetry Dashboard Widget */}
+                    <div className="pt-6 grid grid-cols-2 md:grid-cols-4 gap-4 font-mono text-xs">
+                      <div className="bg-xeno-darkcard/60 p-3 border border-xeno-cyan/20 sci-fi-cut">
+                        <div className="text-xeno-grey text-[10px]">SIGNAL FREQ</div>
+                        <div className="text-xeno-cyan font-bold">432.89 MHz</div>
+                      </div>
+                      <div className="bg-xeno-darkcard/60 p-3 border border-xeno-cyan/20 sci-fi-cut">
+                        <div className="text-xeno-grey text-[10px]">INTEGRITY</div>
+                        <div className="text-xeno-green font-bold">99.4% STABLE</div>
+                      </div>
+                      <div className="bg-xeno-darkcard/60 p-3 border border-xeno-cyan/20 sci-fi-cut">
+                        <div className="text-xeno-grey text-[10px]">ORBIT NODE</div>
+                        <div className="text-xeno-white font-bold">SECTOR 0x89</div>
+                      </div>
+                      <div className="bg-xeno-darkcard/60 p-3 border border-xeno-cyan/20 sci-fi-cut">
+                        <div className="text-xeno-grey text-[10px]">ENTITY METRICS</div>
+                        <div className="text-xeno-cyan font-bold">ACTIVE SCAN</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* -------------------------------------------------- */}
+                {/* SECTION 2: THE ARCHIVES (PROJECT SHOWCASE) */}
+                {/* -------------------------------------------------- */}
+                {activeSection === 'ARCHIVES' && (
+                  <div className="w-full max-w-5xl pointer-events-auto space-y-6">
+                    <div className="flex justify-between items-end border-b border-xeno-cyan/20 pb-4">
+                      <div>
+                        <span className="font-mono text-xs text-xeno-green tracking-widest">[ ARTIFACT ARCHIVES ]</span>
+                        <h2 className="text-2xl md:text-4xl font-extrabold font-mono text-xeno-white">SUB-DIMENSIONAL PROJECTS</h2>
+                      </div>
+                      <span className="font-mono text-xs text-xeno-grey hidden md:block">SELECT ARTIFACT TO INSPECT MATRIX</span>
+                    </div>
+
+                    {/* Project Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {artifacts.map((art) => (
+                        <div
+                          key={art.id}
+                          onClick={() => {
+                            soundSystem.playClickSound();
+                            setSelectedArtifact(art);
+                          }}
+                          onMouseEnter={() => soundSystem.playHoverSound()}
+                          className="bg-xeno-darkcard/70 border border-xeno-cyan/20 p-6 sci-fi-cut hover:border-xeno-cyan hover:bg-xeno-cyan/5 transition-all duration-300 cursor-pointer group"
+                        >
+                          <div className="flex justify-between items-start mb-3">
+                            <span className="font-mono text-xs text-xeno-cyan group-hover:text-xeno-green transition-colors">
+                              ARTIFACT #{art.id}
+                            </span>
+                            <span className="font-mono text-[10px] px-2 py-0.5 bg-xeno-space border border-xeno-grey/30 text-xeno-grey">
+                              {art.status}
+                            </span>
+                          </div>
+
+                          <h3 className="text-xl font-bold font-mono text-xeno-white group-hover:text-xeno-cyan transition-colors mb-2">
+                            {art.name}
+                          </h3>
+
+                          <p className="text-xs text-xeno-grey font-sans line-clamp-2 mb-4">
+                            {art.desc}
+                          </p>
+
+                          <div className="flex flex-wrap gap-2">
+                            {art.tech.map((t, idx) => (
+                              <span key={idx} className="font-mono text-[10px] px-2 py-0.5 bg-xeno-cyan/10 text-xeno-cyan border border-xeno-cyan/30">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* -------------------------------------------------- */}
+                {/* SECTION 3: THE SPECIES (ABOUT SECTION) */}
+                {/* -------------------------------------------------- */}
+                {activeSection === 'SPECIES' && (
+                  <div className="max-w-4xl w-full pointer-events-auto bg-xeno-darkcard/80 border border-xeno-cyan/30 p-6 md:p-8 sci-fi-cut space-y-6 backdrop-blur-md">
+                    <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-xeno-cyan/20 pb-4">
+                      <div>
+                        <span className="font-mono text-xs text-xeno-cyan tracking-widest">[ ENTITY DOSSIER ]</span>
+                        <h2 className="text-3xl font-extrabold font-mono text-xeno-white">WE ARE NOT FROM HERE.</h2>
+                      </div>
+
+                      {/* Bio Scanner Mode Toggle */}
+                      <div className="flex items-center space-x-2 font-mono text-xs">
+                        <span className="text-xeno-grey text-[10px]">SCANNER MODE:</span>
+                        {['NORMAL', 'THERMAL', 'QUANTUM'].map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              soundSystem.playClickSound();
+                              setSpeciesScanMode(mode);
+                            }}
+                            className={`px-2 py-1 text-[10px] border transition-colors ${
+                              speciesScanMode === mode 
+                                ? 'border-xeno-cyan text-xeno-cyan bg-xeno-cyan/10' 
+                                : 'border-xeno-grey/30 text-xeno-grey hover:text-xeno-white'
+                            }`}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono text-xs">
+                      
+                      {/* Hologram Simulation Card */}
+                      <div className={`p-4 border rounded relative flex flex-col justify-center items-center h-48 transition-all ${
+                        speciesScanMode === 'THERMAL' 
+                          ? 'border-xeno-red bg-xeno-red/10 text-xeno-red' 
+                          : speciesScanMode === 'QUANTUM' 
+                          ? 'border-xeno-green bg-xeno-green/10 text-xeno-green' 
+                          : 'border-xeno-cyan/30 bg-xeno-space/60 text-xeno-cyan'
+                      }`}>
+                        <div className="w-20 h-20 border-2 border-dashed rounded-full flex items-center justify-center animate-spin" style={{ animationDuration: '10s' }}>
+                          <div className="w-12 h-12 border border-current rounded-full" />
+                        </div>
+                        <span className="mt-4 font-bold tracking-widest">
+                          [ ENTITY HOLOGRAM: {speciesScanMode} ]
+                        </span>
+                      </div>
+
+                      {/* Metadata Dossier Content */}
+                      <div className="md:col-span-2 space-y-4 font-sans text-sm text-xeno-grey">
+                        <p>
+                          <strong className="text-xeno-white font-mono">ORIGIN:</strong> Sector X-89 / Sub-dimensional Creative Architect entity inhabiting the frontier between 3D WebGL graphics, custom shaders, and experimental interaction design.
+                        </p>
+                        <p>
+                          <strong className="text-xeno-white font-mono">SPECIALIZATION:</strong> Real-time 3D web environments, WebGL/Three.js shaders, reactive sound design engines, GSAP motion choreography, and high-performance React architectures.
+                        </p>
+                        <p>
+                          <strong className="text-xeno-white font-mono">TRANSMISSION STATUS:</strong> Listening for groundbreaking digital collaborations across interstellar boundaries.
+                        </p>
+
+                        <div className="pt-2 flex flex-wrap gap-3 font-mono text-xs">
+                          <div className="px-3 py-1 bg-xeno-space border border-xeno-cyan/30 text-xeno-cyan">
+                            EXP: 8+ EARTH CYCLES
+                          </div>
+                          <div className="px-3 py-1 bg-xeno-space border border-xeno-green/30 text-xeno-green">
+                            RECEPTIVITY: 100%
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* -------------------------------------------------- */}
+                {/* SECTION 4: THE SIGNAL (CONTACT INTERFACE) */}
+                {/* -------------------------------------------------- */}
+                {activeSection === 'SIGNAL' && (
+                  <div className="max-w-xl w-full pointer-events-auto bg-xeno-darkcard/80 border border-xeno-cyan/30 p-6 md:p-8 sci-fi-cut backdrop-blur-md">
+                    <div className="mb-6">
+                      <span className="font-mono text-xs text-xeno-cyan tracking-widest">[ COMMUNICATION LINK ]</span>
+                      <h2 className="text-3xl font-extrabold font-mono text-xeno-white">ESTABLISH CONNECTION</h2>
+                    </div>
+
+                    {formStatus === 'SENT' ? (
+                      <div className="p-6 bg-xeno-green/10 border border-xeno-green text-center space-y-4 sci-fi-cut">
+                        <div className="text-xeno-green font-mono font-bold text-lg">TRANSMISSION BROADCAST SUCCESSFUL</div>
+                        <p className="text-xeno-grey font-sans text-xs">
+                          Your signal payload has been encrypted and dispatched across space vector frequencies. We will respond shortly.
+                        </p>
+                        <button
+                          onClick={() => setFormStatus('IDLE')}
+                          className="px-6 py-2 bg-xeno-green text-xeno-bg font-mono text-xs font-bold sci-fi-cut-sm hover:opacity-90"
+                        >
+                          SEND ANOTHER SIGNAL
+                        </button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleFormSubmit} className="space-y-4 font-mono text-xs">
+                        <div>
+                          <label className="block text-xeno-grey mb-1">SUBJECT ENTITY / NAME</label>
+                          <input
+                            type="text"
+                            required
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            placeholder="Identify your entity..."
+                            className="w-full bg-xeno-space border border-xeno-cyan/30 p-3 text-xeno-white focus:outline-none focus:border-xeno-cyan sci-fi-cut-sm"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xeno-grey mb-1">FREQUENCY CHANNEL / EMAIL</label>
+                          <input
+                            type="email"
+                            required
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            placeholder="entity@planetary-network.org"
+                            className="w-full bg-xeno-space border border-xeno-cyan/30 p-3 text-xeno-white focus:outline-none focus:border-xeno-cyan sci-fi-cut-sm"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xeno-grey mb-1">TRANSMISSION PAYLOAD / MESSAGE</label>
+                          <textarea
+                            rows="4"
+                            required
+                            value={formData.message}
+                            onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                            placeholder="Construct transmission details..."
+                            className="w-full bg-xeno-space border border-xeno-cyan/30 p-3 text-xeno-white focus:outline-none focus:border-xeno-cyan sci-fi-cut-sm"
+                          />
+                        </div>
+
+                        {/* Encryption Progress Bar */}
+                        {formStatus === 'ENCRYPTING' && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] text-xeno-cyan">
+                              <span>ENCRYPTING PAYLOAD...</span>
+                              <span>{encryptProgress}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-xeno-space overflow-hidden">
+                              <div 
+                                className="h-full bg-xeno-cyan transition-all duration-250" 
+                                style={{ width: `${encryptProgress}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {formStatus === 'ERROR' && (
+                          <div className="text-xeno-red text-[11px]">
+                            [ ERROR: ALL TRANSMISSION FIELDS MUST BE POPULATED ]
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={formStatus === 'ENCRYPTING'}
+                          onMouseEnter={() => soundSystem.playHoverSound()}
+                          className="w-full py-3 bg-xeno-cyan text-xeno-bg font-bold font-mono tracking-widest uppercase sci-fi-cut hover:bg-xeno-green transition-colors"
+                        >
+                          {formStatus === 'ENCRYPTING' ? 'ENCRYPTING TRANSMISSION...' : 'SEND TRANSMISSION'}
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                )}
+
+                {/* -------------------------------------------------- */}
+                {/* SECTION 5: THE VOID (CLASSIFIED EASTER EGG ARCHIVE) */}
+                {/* -------------------------------------------------- */}
+                {activeSection === 'VOID' && (
+                  <div className="max-w-3xl w-full pointer-events-auto bg-[#1A040A]/90 border border-xeno-red p-6 md:p-8 sci-fi-cut space-y-6 backdrop-blur-md shadow-[0_0_30px_rgba(255,49,91,0.3)]">
+                    <div className="flex justify-between items-start border-b border-xeno-red/30 pb-4">
+                      <div>
+                        <span className="font-mono text-xs text-xeno-red tracking-widest text-glow-red animate-pulse">
+                          [ CLASSIFIED XENØ ARCHIVE — LEVEL 0 RESTRICTED ]
+                        </span>
+                        <h2 className="text-3xl font-extrabold font-mono text-xeno-white">FORBIDDEN REALITY VOID</h2>
+                      </div>
+                      
+                      <div className="font-mono text-xs text-xeno-red text-right">
+                        <div>VOID TIMER</div>
+                        <div className="font-bold text-lg text-glow-red">
+                          00:{Math.floor(voidTimer / 60).toString().padStart(2, '0')}:{(voidTimer % 60).toString().padStart(2, '0')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Terminal Output Box */}
+                    <div className="bg-[#0A0204] border border-xeno-red/40 p-4 font-mono text-xs text-xeno-red space-y-2 h-48 overflow-y-auto">
+                      {terminalLogs.map((log, idx) => (
+                        <div key={idx} className="leading-relaxed">{log}</div>
+                      ))}
+                    </div>
+
+                    {/* Command Prompt Input */}
+                    <form onSubmit={handleTerminalSubmit} className="flex gap-2 font-mono text-xs">
+                      <span className="text-xeno-red py-2 font-bold">&gt;</span>
+                      <input
+                        type="text"
+                        value={terminalInput}
+                        onChange={(e) => setTerminalInput(e.target.value)}
+                        placeholder="Type 'purge' or 'exit' to restore reality..."
+                        className="flex-1 bg-[#0A0204] border border-xeno-red/40 p-2 text-xeno-white focus:outline-none focus:border-xeno-red"
+                      />
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-xeno-red text-xeno-bg font-bold sci-fi-cut-sm hover:opacity-90"
+                      >
+                        EXECUTE
+                      </button>
+                    </form>
+
+                    <div className="flex justify-between items-center pt-2">
+                      <button
+                        onClick={() => {
+                          soundSystem.playClickSound();
+                          setIsVoid(false);
+                          setActiveSection('CORE');
+                        }}
+                        className="px-4 py-2 border border-xeno-red/50 text-xeno-red font-mono text-xs hover:bg-xeno-red/20 transition-colors sci-fi-cut-sm"
+                      >
+                        RESTORE PRIMAL SIMULATION
+                      </button>
+                      <span className="font-mono text-[10px] text-xeno-red/60">SECTOR DECRYPTION ACTIVE</span>
+                    </div>
+                  </div>
+                )}
+
+              </main>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 3. ARTIFACT INSPECTION MODAL (FOR ARCHIVES) */}
+          {/* ========================================================= */}
+          {selectedArtifact && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-xeno-bg/90 backdrop-blur-lg pointer-events-auto">
+              <div className="max-w-2xl w-full bg-xeno-darkcard border border-xeno-cyan p-6 md:p-8 sci-fi-cut space-y-6 relative shadow-[0_0_40px_rgba(0,240,255,0.4)]">
+                
+                <button
+                  onClick={() => setSelectedArtifact(null)}
+                  className="absolute top-4 right-4 text-xeno-grey hover:text-xeno-cyan font-mono text-xs border border-xeno-grey/30 px-2 py-1"
+                >
+                  [ CLOSE X ]
+                </button>
+
+                <div className="space-y-1">
+                  <span className="font-mono text-xs text-xeno-green">ARTIFACT INSPECTOR // #{selectedArtifact.id}</span>
+                  <h3 className="text-3xl font-extrabold font-mono text-xeno-white">{selectedArtifact.name}</h3>
+                  <div className="text-xeno-cyan font-mono text-xs">{selectedArtifact.category}</div>
+                </div>
+
+                {/* Wireframe Preview Simulation */}
+                <div className="w-full h-40 bg-xeno-space border border-xeno-cyan/30 flex items-center justify-center relative overflow-hidden">
+                  <div className="w-24 h-24 border-2 border-xeno-cyan rotate-45 animate-spin" style={{ animationDuration: '15s' }} />
+                  <span className="absolute font-mono text-[10px] text-xeno-cyan/70">
+                    WIREFRAME MATRIX PREVIEW
+                  </span>
+                </div>
+
+                <p className="font-sans text-sm text-xeno-grey leading-relaxed">
+                  {selectedArtifact.desc}
+                </p>
+
+                <div className="space-y-2">
+                  <span className="font-mono text-xs text-xeno-white block">SUB-SYSTEM TECH STACK:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedArtifact.tech.map((t, idx) => (
+                      <span key={idx} className="font-mono text-xs px-3 py-1 bg-xeno-cyan/10 text-xeno-cyan border border-xeno-cyan/40">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-between items-center border-t border-xeno-cyan/20">
+                  <span className="font-mono text-xs text-xeno-green">STATUS: {selectedArtifact.status}</span>
+                  <button
+                    onClick={() => {
+                      soundSystem.playClickSound();
+                      setSelectedArtifact(null);
+                    }}
+                    className="px-6 py-2 bg-xeno-cyan text-xeno-bg font-mono font-bold text-xs sci-fi-cut hover:bg-xeno-green"
+                  >
+                    DISMISS INSPECTION
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    };
+
+    // Render App Component into DOM root
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
